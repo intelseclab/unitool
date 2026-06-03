@@ -1,7 +1,6 @@
 # PyInstaller
 build/
 dist/
-*.spec
 icon.ico
 
 # Python
