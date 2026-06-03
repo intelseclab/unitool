@@ -1,0 +1,33 @@
+name: Validate Translations
+
+# Runs on any PR or push that touches translation files (or the checker itself).
+# Contributors adding a new language only need to add a resources/languages/<code>.json
+# file — this workflow verifies it is complete and well-formed, no code review needed.
+on:
+  pull_request:
+    paths:
+      - 'resources/languages/**'
+      - 'tools/check_translations.py'
+      - '.github/workflows/translations.yml'
+  push:
+    branches: [main, master]
+    paths:
+      - 'resources/languages/**'
+      - 'tools/check_translations.py'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    name: Validate language JSON files
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate translation files
+        run: python tools/check_translations.py
