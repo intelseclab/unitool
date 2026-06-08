@@ -233,7 +233,10 @@ def goodbyedpi_exe() -> Path:
 
 
 def goodbyedpi_available() -> bool:
-    return _GDPI_EXE.is_file()
+    # WinDivert.dll must sit next to goodbyedpi.exe — an install missing it
+    # (e.g. from an older buggy extraction) is treated as incomplete so the UI
+    # re-downloads and lays the files out correctly.
+    return _GDPI_EXE.is_file() and (_GDPI_DIR / 'WinDivert.dll').is_file()
 
 
 def download_goodbyedpi(progress_cb=None) -> tuple[bool, str]:
@@ -297,14 +300,36 @@ def download_goodbyedpi(progress_cb=None) -> tuple[bool, str]:
 
         zip_path.unlink(missing_ok=True)
 
-        if not _GDPI_EXE.is_file():
-            # Some releases nest inside a subfolder; try to find the exe
-            matches = list(_GDPI_DIR.rglob('goodbyedpi.exe'))
-            if matches:
-                shutil.move(str(matches[0]), str(_GDPI_EXE))
+        # GoodbyeDPI ships its binaries inside arch subfolders (x86/, x86_64/),
+        # and goodbyedpi.exe needs WinDivert.dll + WinDivert*.sys sitting in the
+        # SAME directory to run. Relocate the whole arch folder's contents into
+        # _GDPI_DIR (preferring 64-bit on 64-bit Windows). Moving only the .exe
+        # orphans it from WinDivert.dll → launch fails with a missing-DLL error.
+        if not (_GDPI_EXE.is_file() and (_GDPI_DIR / 'WinDivert.dll').is_file()):
+            arch_matches = [m for m in _GDPI_DIR.rglob('goodbyedpi.exe')
+                            if m.parent != _GDPI_DIR]
+            if arch_matches:
+                want_64 = sys.maxsize > 2 ** 32
+
+                def _is64(p) -> bool:
+                    n = p.parent.name.lower()
+                    return 'x86_64' in n or 'amd64' in n or 'x64' in n
+
+                preferred = [m for m in arch_matches if _is64(m) == want_64]
+                src_dir = (preferred or arch_matches)[0].parent
+                for item in src_dir.iterdir():
+                    dest = _GDPI_DIR / item.name
+                    if dest.exists():
+                        if dest.is_dir():
+                            shutil.rmtree(dest, ignore_errors=True)
+                        else:
+                            dest.unlink()
+                    shutil.move(str(item), str(dest))
 
         if not _GDPI_EXE.is_file():
             return False, 'goodbyedpi.exe not found after extraction.'
+        if not (_GDPI_DIR / 'WinDivert.dll').is_file():
+            return False, 'WinDivert.dll not found after extraction.'
 
         return True, ''
 
@@ -477,11 +502,14 @@ class DpiEngine:
                 return False, 'Could not elevate: install pkexec or configure sudo NOPASSWD.'
 
             flags = 0x08000000 if sys.platform == 'win32' else 0
+            # Launch from the binary's own directory so co-located dependencies
+            # (e.g. WinDivert.dll + WinDivert*.sys next to goodbyedpi.exe) resolve.
             proc = subprocess.Popen(
                 args,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 creationflags=flags,
+                cwd=os.path.dirname(args[0]) or None,
             )
             with self._lock:
                 self._proc = proc
@@ -525,6 +553,9 @@ class DpiEngine:
         sei.lpVerb       = 'runas'
         sei.lpFile       = exe
         sei.lpParameters = params
+        # Run from the exe's own folder so WinDivert.dll and the WinDivert*.sys
+        # driver (which WinDivert loads relative to the working directory) resolve.
+        sei.lpDirectory  = os.path.dirname(exe)
         sei.nShow        = 0
 
         if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(sei)):
