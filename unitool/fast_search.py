@@ -24,6 +24,8 @@ from typing import Callable
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from .platform_utils import SYSTEM_DIRS
+
 # ── Result type ───────────────────────────────────────────────────────────────
 
 @dataclass
@@ -431,6 +433,10 @@ class IndexedBackend:
                     for e in it:
                         try:
                             if e.is_dir(follow_symlinks=False):
+                                # Skip pseudo / system filesystems (/proc, /sys,
+                                # /dev, …) so a full-disk index stays fast & sane.
+                                if e.name.lower() in SYSTEM_DIRS:
+                                    continue
                                 subdirs.append(e.path)
                             elif e.is_file(follow_symlinks=False):
                                 st   = e.stat()
@@ -666,6 +672,8 @@ def scan_path_incremental(
                 for e in it:
                     try:
                         if e.is_dir(follow_symlinks=False):
+                            if e.name.lower() in SYSTEM_DIRS:
+                                continue
                             subdirs.append(e.path)
                         elif e.is_file(follow_symlinks=False):
                             rec = _match(e)
