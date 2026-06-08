@@ -111,7 +111,7 @@ if sys.platform == 'win32':
         return paths
 
     def _kernel_path_to_real(kpath: str) -> str:
-        """Convert \SystemRoot\... / \??\C:\... to a filesystem path."""
+        r"""Convert \SystemRoot\... / \??\C:\... to a filesystem path."""
         sys_root = os.environ.get('SystemRoot', r'C:\Windows')
         p = kpath
         for prefix in ('\\SystemRoot\\', '\\Windows\\'):
