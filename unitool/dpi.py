@@ -359,24 +359,13 @@ class _LinuxProc:
 
 
 def _run_unix_elevated(script: str) -> tuple[bool, str]:
-    """Write a bash script to /tmp and run it with pkexec or sudo -n."""
-    fd, sh = tempfile.mkstemp(suffix='.sh', prefix='unitool_dpi_', dir='/tmp')
-    try:
-        os.write(fd, script.encode())
-        os.close(fd)
-        os.chmod(sh, 0o700)
-        for argv in (['pkexec', 'bash', sh], ['sudo', '-n', 'bash', sh]):
-            r = subprocess.run(argv, capture_output=True, timeout=30)
-            if r.returncode == 0:
-                return True, ''
-        return False, 'Could not elevate. Install pkexec or configure sudo NOPASSWD.'
-    except Exception as exc:
-        return False, str(exc)
-    finally:
-        try:
-            os.unlink(sh)
-        except OSError:
-            pass
+    """Run a bash script as root, prompting for the password if needed."""
+    from . import elevation
+    return elevation.run_script(
+        script,
+        prompt='UniTool needs administrator access to reroute network traffic '
+               'for the Internet Freedom (DPI bypass) feature.',
+    )
 
 
 # ── Engine ────────────────────────────────────────────────────────────────────
@@ -454,9 +443,13 @@ class DpiEngine:
             f' -j NFQUEUE --queue-num {q}\n'
             f'ip6tables -I OUTPUT -p tcp -m multiport --dports 80,443'
             f' -j NFQUEUE --queue-num {q}\n'
-            # Start nfqws in background; record PID
-            f'{nfqws_cmd} &\n'
+            # Start nfqws in the background; record its PID. stdin/stdout/stderr
+            # are detached to /dev/null so it does NOT inherit the elevation
+            # subprocess's captured pipes (otherwise the parent would block
+            # reading stdout until nfqws exits).
+            f'{nfqws_cmd} </dev/null >/dev/null 2>&1 &\n'
             f'echo $! > {_NFQWS_PID_FILE}\n'
+            'disown\n'
         )
         return _run_unix_elevated(script)
 
@@ -577,6 +570,10 @@ class DpiEngine:
             q = _NFQWS_QNUM
             script = (
                 '#!/bin/bash\n'
+                # nfqws runs as root, so it must be killed with root rights —
+                # the non-elevated proc.terminate() above cannot reach it.
+                f'[ -f {_NFQWS_PID_FILE} ] && kill "$(cat {_NFQWS_PID_FILE})"'
+                f' 2>/dev/null; true\n'
                 f'iptables  -D OUTPUT -p tcp -m multiport --dports 80,443'
                 f' -j NFQUEUE --queue-num {q} 2>/dev/null; true\n'
                 f'ip6tables -D OUTPUT -p tcp -m multiport --dports 80,443'

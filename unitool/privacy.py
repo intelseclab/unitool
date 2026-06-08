@@ -602,11 +602,27 @@ def clean_ram() -> tuple[int, str]:
         if sys.platform == 'win32':
             _clean_ram_windows()
         elif sys.platform == 'darwin':
-            subprocess.run(['sudo', 'purge'], capture_output=True, timeout=15)
+            if _is_admin():
+                subprocess.run(['purge'], capture_output=True, timeout=15)
+            else:
+                from . import elevation
+                ok, err = elevation.run_script(
+                    'purge',
+                    prompt='UniTool needs administrator access to free RAM.')
+                if not ok:
+                    return 0, err or 'Could not free RAM (administrator required).'
         else:
             if _is_admin():
                 with open('/proc/sys/vm/drop_caches', 'w') as f:
                     f.write('3')
+            else:
+                from . import elevation
+                ok, err = elevation.run_script(
+                    'sync; echo 3 > /proc/sys/vm/drop_caches',
+                    prompt='UniTool needs administrator access to drop kernel '
+                           'caches and free RAM.')
+                if not ok:
+                    return 0, err or 'Could not free RAM (root required).'
         after = get_ram_info()['available']
         return max(0, after - before), ''
     except Exception as e:
