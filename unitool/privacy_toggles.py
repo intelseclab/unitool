@@ -932,20 +932,12 @@ def _run_linux_elevated(svc_ops: list[SystemdSvcOp], sysctl_ops: list[SysctlOp],
 
     lines.extend(sh_lines)
 
-    fd, sh = tempfile.mkstemp(suffix='.sh', prefix='unitool_prv_', dir='/tmp')
-    try:
-        os.write(fd, '\n'.join(lines).encode())
-        os.close(fd)
-        for argv in (['pkexec', 'bash', sh], ['sudo', '-n', 'bash', sh]):
-            r = subprocess.run(argv, capture_output=True, timeout=60)
-            if r.returncode == 0:
-                return True, ''
-        return False, 'Could not elevate privileges. Install pkexec or configure sudo NOPASSWD.'
-    finally:
-        try:
-            os.unlink(sh)
-        except OSError:
-            pass
+    from . import elevation
+    return elevation.run_script(
+        '\n'.join(lines),
+        prompt='UniTool needs administrator access to apply these privacy '
+               'settings (systemd services / kernel parameters).',
+    )
 
 
 def _write_hkcu(op: RegOp, revert: bool):

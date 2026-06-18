@@ -81,7 +81,7 @@ A fast, modern desktop utility suite for Windows, macOS, and Linux - built with 
   - **Windows:** Windows Firewall rules + null route (bypasses third-party AV/firewall WFP hooks) + terminates existing sessions via `Remove-NetTCPConnection`
   - **macOS:** Null route to loopback (`route add -host`) + `socketfilterfw` for process blocking
   - **Linux:** Blackhole route (`ip route replace blackhole`) + `ss -K` for session teardown
-- Elevation: UAC (Windows), `osascript` (macOS), `pkexec` / `sudo` (Linux)
+- Elevation is requested **per operation** — never run UniTool itself with `sudo`. UAC (Windows), `osascript` native dialog (macOS), or an in-app password prompt → `sudo` (Linux, falling back to cached/NOPASSWD credentials when present)
 - Filter, sort, and export connections to CSV
 
 ### General

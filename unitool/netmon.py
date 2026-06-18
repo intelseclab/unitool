@@ -375,53 +375,18 @@ class FirewallManager:
 
     @classmethod
     def _run_unix(cls, script: str) -> tuple[bool, str]:
-        """macOS / Linux: run a bash script, elevating to root if needed."""
-        if cls.is_admin():
-            r = subprocess.run(['bash', '-c', script], capture_output=True, timeout=60)
-            if r.returncode != 0:
-                return False, r.stderr.decode(errors='replace').strip()
-            return True, ''
-        if _OS == 'Darwin':
-            return cls._run_unix_macos(script)
-        return cls._run_unix_linux(script)
+        """macOS / Linux: run a bash script, elevating to root if needed.
 
-    @classmethod
-    def _run_unix_macos(cls, script: str) -> tuple[bool, str]:
-        # osascript 'do shell script' shows the native macOS password dialog.
-        fd, sh = tempfile.mkstemp(suffix='.sh', prefix='unitool_fw_', dir='/tmp')
-        try:
-            os.write(fd, script.encode())
-            os.close(fd)
-            osa = f'do shell script "bash {sh}" with administrator privileges'
-            r = subprocess.run(['osascript', '-e', osa], capture_output=True, timeout=120)
-            if r.returncode != 0:
-                msg = r.stderr.decode(errors='replace').strip()
-                return False, msg or 'Authorisation cancelled.'
-            return True, ''
-        finally:
-            try:
-                os.unlink(sh)
-            except OSError:
-                pass
-
-    @classmethod
-    def _run_unix_linux(cls, script: str) -> tuple[bool, str]:
-        # Try pkexec (GUI polkit prompt) then sudo -n (NOPASSWD only).
-        fd, sh = tempfile.mkstemp(suffix='.sh', prefix='unitool_fw_', dir='/tmp')
-        try:
-            os.write(fd, script.encode())
-            os.close(fd)
-            for argv in (['pkexec', 'bash', sh], ['sudo', '-n', 'bash', sh]):
-                r = subprocess.run(argv, capture_output=True, timeout=60)
-                if r.returncode == 0:
-                    return True, ''
-            return False, ('Could not elevate privileges.\n'
-                           'Install pkexec (polkit) or configure sudo NOPASSWD.')
-        finally:
-            try:
-                os.unlink(sh)
-            except OSError:
-                pass
+        Prompts for the password through a Qt dialog when no cached / NOPASSWD
+        sudo credential is available, so the app never has to be launched with
+        sudo itself.
+        """
+        from . import elevation
+        return elevation.run_script(
+            script,
+            prompt='UniTool needs administrator access to update the firewall '
+                   'and routing table.',
+        )
 
     # ── Public API ────────────────────────────────────────────────────────────
 

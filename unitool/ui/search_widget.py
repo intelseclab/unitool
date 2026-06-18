@@ -598,7 +598,12 @@ class SearchWidget(QWidget):
     # ── Search ────────────────────────────────────────────────────────────────
 
     def _run_search(self):
-        if not self._engine.is_realtime and not self._engine.is_indexed():
+        # A scoped search (a specific drive/folder) is a live filesystem scan
+        # and works regardless of the index state. Only an "all locations"
+        # search on a non-real-time backend actually needs a prior index.
+        if (self._scope is None
+                and not self._engine.is_realtime
+                and not self._engine.is_indexed()):
             self._stat_found.setText(tr('srch_not_indexed'))
             return
 
@@ -757,13 +762,13 @@ class SearchWidget(QWidget):
         self._stat_backend.setText(f'⚡ {self._engine.backend_name}')
 
     def _get_index_roots(self) -> list[str]:
-        import string
-        drives = []
-        for letter in string.ascii_uppercase:
-            p = f'{letter}:\\'
-            if os.path.exists(p):
-                drives.append(p)
-        return drives or [os.path.expanduser('~')]
+        # If a scope is selected, index just that; otherwise index every mounted
+        # drive/volume (list_drives() is cross-platform: drive letters on
+        # Windows, '/' + /Volumes on macOS, mount points on Linux).
+        if self._scope:
+            return [self._scope]
+        roots = list_drives()
+        return roots or [os.path.expanduser('~')]
 
     # ── Status ────────────────────────────────────────────────────────────────
 
