@@ -471,6 +471,7 @@
   "inst_deselect_all": "لغو انتخاب همه",
   "inst_searching": "در حال جستجوی winget برای «{query}»…",
   "inst_press_enter": "در کاتالوگ موجود نیست — Enter بزنید تا winget «{query}» را جستجو کند",
+  "inst_search_results": "نتایج winget برای «{query}»",
   "inst_back_catalog": "← بازگشت به کاتالوگ",
   "inst_no_results": "نتیجه‌ای برای «{query}» پیدا نشد.",
   "lang_label": "زبان / Language",
